@@ -3,9 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aula 1</title>
+    <title>Gerenciador de tarefas</title>
 </head>
 <body>
-    <h1>ola mundo do desenvolvimento WEB!</h1>
+    <header> 
+        <h1> Gerenciador De Tarefas</h1>
+    </header>
+
+    <main>
+        <!-- Seção do formulario de cadastro -->
+        <section>
+            <h2>Criar uma nova tarefa</h2>
+            <Form>
+                <div>
+                    <label for="imput-titulo">Titulo da atividade:</label>
+                    <input type="text" id="imput-titulo" required placeholder="Digite o nome da atividade ...">
+                </div>
+                <div>
+                    <label for="select-prioridade">Prioridade:</label>
+                    <select id="select-prioridade">
+                        <option value="low">Baixa</option>
+                        <option value="medium">Media</option>
+                        <option value="high">Alta</option>
+                    </select>
+                </div>
+                <button type="submit">Cadastrar</button>
+            </Form>
+
+        </section>
+        <!-- Seção da lista de tarefas (prototipo Estático)-->
+        <section>
+            <h2>Minhas tarefas:</h2>
+            <div>
+                <input type="checkbox">
+                <h4>Estudar para a prova de WEB</h4>
+            </div>
+        </section>
+    
+    </main>
+    <footer>
+        <p>Desenvolvimento de sistemas web-2026</p>
+
+    </footer>
 </body>
 </html>
