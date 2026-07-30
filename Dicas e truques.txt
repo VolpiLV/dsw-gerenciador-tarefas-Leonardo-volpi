@@ -1,0 +1,13 @@
+CSS Puro >tailwind
+background>bg   
+bg-red-50
+Ctrl+/(barra) Variaçoes
+
+margin >m- 
+    left >ml-
+    right >mr-
+    top >mt-
+    botton >mb-
+padding >p-
+height  >h-
+width >w-
