@@ -1,7 +1,13 @@
-###============================================== 
-### Aula 5: ROTAS DE DIAGNOSTICOS
-###==============================================
+### Listar todas as tarefas
+GET http://localhost:3000/api/tasks
 
-### Testar integridade do sistema (health check)
-GET http://localhost:3000/api/health
+### Criar uma nova tarefa
+POST http://localhost:3000/api/tasks
+Content-Type: application/json
 
+{
+  "title": "Nova tarefa de teste"
+}
+
+### Deletar uma tarefa (troque o :id pelo id real retornado no POST)
+DELETE http://localhost:3000/api/tasks/1
