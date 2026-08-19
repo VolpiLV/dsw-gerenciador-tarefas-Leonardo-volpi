@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "names": "dsw-gerenciador-de-tarefas-at1",
   "versions": "1.0.0",
   "description": "* ** Estudante** João Volkmann # objetivos do projetos",
@@ -32,12 +33,29 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
+=======
+  "name": "Gerenciador de Tarefas",
+  "version": "1,0,0",
+  "type": "module",
+  "scripts": {
+    "dev":"tsx watch server.ts",
+    "start": "tsx server.ts",
+    "build":"tsc"
+},
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+>>>>>>> 8a44c657591799357967da98d3fe924daf32c723
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
+<<<<<<< HEAD
   },
   "allowScripts": {
     "better-sqlite3@13.0.3": true
+=======
+>>>>>>> 8a44c657591799357967da98d3fe924daf32c723
   }
 }
