@@ -1,27 +1,14 @@
 import express from "express";
-<<<<<<< HEAD
 import Database from "better-sqlite3";  
-import { table } from "node:console";
-import { exists } from "node:fs";
-=======
->>>>>>> 8a44c657591799357967da98d3fe924daf32c723
 
 const app = express();
 const PORT = 3000;
 
-<<<<<<< HEAD
 // Middleware obrigatório para ler o corpo das requisições em formato JSON
 app.use(express.json());
 
 const db = new Database("tarefas.db");
 
-db.exec(
-    create table
-
-);
-  create table if not exists.usuarios(
-    v  
-  ) 
 
 // Banco de dados provisório em memória RAM
 let bancoDeDadosProvisorio = [
@@ -55,15 +42,3 @@ app.delete("/api/tasks/:id", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor rodando em: http://localhost:${PORT}`);
 });
-=======
-
-//rota de integridade do sistema 
-app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", message: "servidor do gestor de tarefas ativo!" });  
-});
-
-
-app.listen(PORT,() => {
-    console.log('servidor rodando em http://localhost:${PORT}' );
-});
->>>>>>> 8a44c657591799357967da98d3fe924daf32c723
