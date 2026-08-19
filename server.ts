@@ -1,10 +1,23 @@
 import express from "express";
+import Database from "better-sqlite3";  
+import { table } from "node:console";
+import { exists } from "node:fs";
 
 const app = express();
 const PORT = 3000;
 
 // Middleware obrigatório para ler o corpo das requisições em formato JSON
 app.use(express.json());
+
+const db = new Database("tarefas.db");
+
+db.exec(
+    create table
+
+);
+  create table if not exists.usuarios(
+    v  
+  ) 
 
 // Banco de dados provisório em memória RAM
 let bancoDeDadosProvisorio = [
