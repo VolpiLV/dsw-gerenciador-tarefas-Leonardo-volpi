@@ -9,6 +9,29 @@ app.use(express.json());
 
 const db = new Database("tarefas.db");
 
+db.exec(`
+    CREATE TABLE IF NOT EXISTS tarefas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        titulo TEXT NOT NULL,
+        status TEXT DEFAULT 'pending'
+    );
+
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        senha TEXT NOT NULL
+    );
+`);
+
+// Inserindo dados falsos para serem vazados
+const usuariosExistentes = db.prepare("SELECT COUNT(*) AS count FROM usuarios").get() as any;
+if (usuariosExistentes.count === 0) {
+    db.exec(`
+        INSERT INTO usuarios (email, senha) VALUES ('admin@senail.com', 'senha_super_segura_123')
+    `);
+}
+
+console.log("Banco de dados SQLite inicializado com sucesso!");
 
 // Banco de dados provisório em memória RAM
 let bancoDeDadosProvisorio = [
