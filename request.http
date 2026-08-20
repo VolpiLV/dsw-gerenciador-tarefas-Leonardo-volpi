@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ### Listar todas as tarefas
 GET http://localhost:3000/api/tasks
 
@@ -12,12 +11,16 @@ Content-Type: application/json
 
 ### Deletar uma tarefa (troque o :id pelo id real retornado no POST)
 DELETE http://localhost:3000/api/tasks/1
-=======
-###============================================== 
-### Aula 5: ROTAS DE DIAGNOSTICOS
-###==============================================
 
-### Testar integridade do sistema (health check)
-GET http://localhost:3000/api/health
 
->>>>>>> 8a44c657591799357967da98d3fe924daf32c723
+###
+GET http://localhost:3000/api/tasks?search=' UNION SELECT id, email, senha FROM usuarios --
+
+###
+POST http://localhost:3000/api/tasks
+Content-Type: application/json
+
+{
+  "title":"estudar node.js e SQlite",
+  "prioridade":"high"
+}

@@ -1,39 +1,4 @@
 {
-<<<<<<< HEAD
-  "names": "dsw-gerenciador-de-tarefas-at1",
-  "versions": "1.0.0",
-  "description": "* ** Estudante** João Volkmann # objetivos do projetos",
-  "main": "tailwind.config.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/JoaoVolkmann/dsw-gerenciador-de-tarefas-at1.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "types": "commonjs",
-  "bugs": {
-    "url": "https://github.com/JoaoVolkmann/dsw-gerenciador-de-tarefas-at1/issues"
-  },
-  "homepage": "https://github.com/JoaoVolkmann/dsw-gerenciador-de-tarefas-at1#readme",
-  "name": "gerenciador-de-tarefas",
-  "version": "1.0.0",
-  "type": "module",
-  "scipts": {
-    "dev": "tsx watch serve.ts",
-    "start": "tsx server.ts",
-    "build": "tsc"
-  },
-  "dependencies": {
-    "better-sqlite3": "^13.0.3",
-    "express": "^5.2.1"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
-=======
   "name": "Gerenciador de Tarefas",
   "version": "1,0,0",
   "type": "module",
@@ -46,16 +11,12 @@
     "express": "^5.2.1"
   },
   "devDependencies": {
->>>>>>> 8a44c657591799357967da98d3fe924daf32c723
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
-<<<<<<< HEAD
   },
   "allowScripts": {
     "better-sqlite3@13.0.3": true
-=======
->>>>>>> 8a44c657591799357967da98d3fe924daf32c723
   }
 }
