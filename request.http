@@ -21,6 +21,6 @@ POST http://localhost:3000/api/tasks
 Content-Type: application/json
 
 {
-  "title":"estudar node.js e SQlite",
+  "title":"estudar react",
   "prioridade":"high"
 }
