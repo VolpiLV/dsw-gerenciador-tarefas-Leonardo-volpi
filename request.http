@@ -104,3 +104,12 @@ PATCH http://localhost:3000/api/tasks/1
 Content-Type: application/json
 
 {}
+### Teste 1: Deleção de Sucesso
+# Alterar o número '1' no final da URL para um ID 
+#que você sabe que existe no seu banco
+DELETE http://localhost:3000/api/tasks/1
+###
+### Teste 2: Deleção de Falha (ID Inexistente)
+# Este teste valida o erro 404 e a mensagem customizada
+# do seu 'if (resultado.changes === 0)'
+DELETE http://localhost:3000/api/tasks/99999

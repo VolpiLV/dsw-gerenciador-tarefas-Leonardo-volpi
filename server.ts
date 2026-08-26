@@ -54,16 +54,6 @@ if (usuariosExistentes.count === 0) {
 
 console.log("Banco de dados SQLite inicializado com sucesso!");
 
-// Banco de dados provisório em memória RAM
-let bancoDeDadosProvisorio = [
-  { id: 1, title: "Estudar Aquitetura REST no Módulo 2", status: "pending" }
-];
-
-// Rota REST para listar todas as tarefas
-app.get("/api/tasks", (req, res) => {
-  res.json(bancoDeDadosProvisorio);
-});
-
 app.post("/api/tasks", (req, res) => {
     const { title, prioridade } = req.body;
     const prioridadeValida = ['low', 'medium', 'high'].includes(prioridade) ? prioridade : 'medium';
@@ -88,13 +78,30 @@ app.post("/api/tasks", (req, res) => {
     }
 });
 
-// Rota REST para deletar uma tarefa
+// Rota para deletar fisicamente uma tarefa do banco
 app.delete("/api/tasks/:id", (req, res) => {
-  const idParaDeletar = parseInt(req.params.id);
-  bancoDeDadosProvisorio = bancoDeDadosProvisorio.filter(t => t.id !== idParaDeletar);
-  res.json({ message: "Tarefa removida com sucesso da memória!" });
+    const { id } = req.params;
+    try {
+        const sql = "DELETE FROM tarefas WHERE id = ?";
+        const resultado = db.prepare(sql).run(id);
+        
+        // No SQLite, o sucesso é medido pelo número de 
+        // linhas afetadas (changes)
+        if (resultado.changes === 0) {
+            res.status(404).json(
+                { error: "Tarefa não localizada para exclusão." }
+            );
+            return;
+        }
+        res.json(
+            { message: "Tarefa excluída do banco SQLite com sucesso!" }
+        );
+    } catch (erro) { 
+        res.status(500).json(
+        { error: erro instanceof Error ? erro.message : "Erro desconhecido" }
+        );
+    }
 });
-
 // A Rota PUT atualiza uma tarefa existente no SQLite com validações estritas
 app.put("/api/tasks/:id", (req, res) => {
   const idParaAtualizar = parseInt(req.params.id);
