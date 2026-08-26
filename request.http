@@ -24,3 +24,44 @@ Content-Type: application/json
   "title":"estudar react",
   "prioridade":"high"
 }
+### ============================================ 
+### DESAFIO CRUD: Atualização de Tarefas (PUT)
+### ============================================ 
+
+### Cenário 1: Atualização Total com Sucesso
+PUT http://localhost:3000/api/tasks/1
+Content-Type: application/json
+
+{
+  "title": "Estudar Node.js, SQLite e fazer deploy",
+  "prioridade": "high",
+  "status": "completed"
+}
+
+
+### Cenário 2: Erro - Título apenas com espaços
+PUT http://localhost:3000/api/tasks/1
+Content-Type: application/json
+
+{ "title": "   ", "prioridade": "low" }
+
+
+### Cenário 3: Erro - Título curto (Abaixo de 3 caracteres)
+PUT http://localhost:3000/api/tasks/1
+Content-Type: application/json
+
+{ "title": "Go", "prioridade": "medium" }
+
+
+### Cenário 4: Erro - ID inexistente (Deve retornar 404)
+PUT http://localhost:3000/api/tasks/9999
+Content-Type: application/json
+
+{ "title": "Tarefa fantasma", "prioridade": "medium", "status": "pending" }
+
+
+### Cenário 5: Erro - ID de texto inválido (Deve retornar 400)
+PUT http://localhost:3000/api/tasks/abc
+Content-Type: application/json
+
+{ "title": "ID incorreto na rota", "prioridade": "medium" }

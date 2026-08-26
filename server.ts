@@ -95,6 +95,54 @@ app.delete("/api/tasks/:id", (req, res) => {
   res.json({ message: "Tarefa removida com sucesso da memória!" });
 });
 
+// A Rota PUT atualiza uma tarefa existente no SQLite com validações estritas
+app.put("/api/tasks/:id", (req, res) => {
+  const idParaAtualizar = parseInt(req.params.id);
+  
+  // 1. Validação do ID numérico recebido na URL
+  if (isNaN(idParaAtualizar)) {
+    return res.status(400).json({ error: "ID inválido." });
+  }
+
+
+  const { title, prioridade, status } = req.body;
+
+
+  // 2. Validação rígida do Título (assim como na Aula 10)
+  if (!title || title.trim().length < 3) {
+    return res.status(400).json({
+      error: "O título da tarefa é obrigatório e deve conter pelo menos 3 caracteres válidos."
+    });
+  }
+
+
+  // 3. Sanitização e valores padrão para prioridade e status
+  const prioridadeValida = ['low', 'medium', 'high'].includes(prioridade) ? prioridade : 'medium';
+  const statusValido = ['pending', 'completed'].includes(status) ? status : 'pending';
+
+
+  try {
+    // 4. Execução do UPDATE utilizando Prepared Statement (?) para segurança
+    const sql = "UPDATE tarefas SET titulo = ?, status = ?, prioridade = ? WHERE id = ?";
+    const resultado = db.prepare(sql).run(title.trim(), statusValido, prioridadeValida, idParaAtualizar);
+
+
+    // 5. Verifica se alguma linha foi de fato modificada no banco
+    if (resultado.changes === 0) {
+      return res.status(404).json({ message: "Tarefa não encontrada para atualização!" });
+    }
+
+
+    // 6. Busca a tarefa recém-atualizada para retornar no corpo da resposta (Princípio REST)
+    const tarefaAtualizada = db.prepare("SELECT * FROM tarefas WHERE id = ?").get(idParaAtualizar);
+    return res.status(200).json(tarefaAtualizada);
+
+
+  } catch (erro) {
+    return res.status(500).json({ error: "Erro ao processar a atualização no banco de dados." });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando em: http://localhost:${PORT}`);
 });
