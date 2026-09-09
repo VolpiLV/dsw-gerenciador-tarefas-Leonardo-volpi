@@ -2,7 +2,7 @@ Gerenciador de Tarefas
 
 Projeto da disciplina de Desenvolvimento de Sistemas Web (DSW).
 
-Estudante: João Volkmann
+Estudante: Leonardo Volpi
 
 Objetivo do Projeto
 
