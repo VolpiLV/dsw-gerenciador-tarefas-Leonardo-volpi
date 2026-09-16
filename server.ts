@@ -81,7 +81,8 @@ app.get("/api/tasks", (req, res) => {
     // 4. Erro Controlado: Se algo quebrar, damos uma mensagem genérica para não vazar a estrutura do banco
     res.status(500).json({ error: "Erro interno ao processar a listagem." });
   }
-});
+}
+);
 // Inserindo dados falsos para serem vazados
 // Bom: Tipagem correta sem usar "as any"
 const usuariosExistentes = stmtContarUsuarios.get() as { count: number };
@@ -156,8 +157,7 @@ app.put("/api/tasks/:id", (req, res) => {
     if (resultado.changes === 0) {
       return res.status(404).json({ message: "Tarefa não encontrada para atualização!" });
     }
-    const tarefaAtualizada =
-      stmtBuscarPorId.get(idParaAtualizar) as Tarefa;
+    const tarefaAtualizada = stmtBuscarPorId.get(idParaAtualizar) as Tarefa;
     return res.status(200).json(tarefaAtualizada);
   } catch {
     return res.status(500).json({ error: "Erro ao processar a atualização no banco de dados." });
@@ -203,18 +203,15 @@ app.patch("/api/tasks/:id", (req, res) => {
       }
       // Status (se enviado)
       if (status !== undefined) {
-        if (!STATUS_VALIDOS.includes(status as typeof
-          STATUS_VALIDOS[number])) {
+        if (!STATUS_VALIDOS.includes(status as typeof STATUS_VALIDOS[number])) {
           throw new Error("Status inválido. Use 'pending' ou 'completed'.");
         }
         camposParaAtualizar.push("status = ?");
         valoresParaAtualizar.push(status);
       }
-      if (camposParaAtualizar.length === 0) return
-      tarefaExistente;
+      if (camposParaAtualizar.length === 0) return tarefaExistente;
       // Query dinâmica SEGURA: placeholders ? + valores array
-      const sql = `UPDATE tarefas SET $
-{camposParaAtualizar.join(", ")} WHERE id = ?`;
+      const sql = `UPDATE tarefas SET $ {camposParaAtualizar.join(", ")} WHERE id = ?`;
       valoresParaAtualizar.push(idParaAtualizar);
       db.prepare(sql).run(...valoresParaAtualizar);
       return stmtBuscarPorId.get(idParaAtualizar) as Tarefa;
@@ -229,8 +226,7 @@ app.patch("/api/tasks/:id", (req, res) => {
   } catch (erro) {
     // Distingue erro de validação (400) de erro interno (500)
     if (erro instanceof Error &&
-      (erro.message.includes("inválid") || erro.message.includes("caracteres"))) {
-      return res.status(400).json({ error: erro.message });
+      (erro.message.includes("inválid") || erro.message.includes("caracteres"))) { return res.status(400).json({ error: erro.message });
     }
 
     return res.status(500).json({ error: "Erro ao processar a atualização parcial no banco." });
