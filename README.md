@@ -25,3 +25,6 @@ Estrutura do Projeto
 ├── index.html          # Interface principal (login, cadastro e lista de tarefas)
 ├── tailwind.config.js  # Configuração do Tailwind CSS
 └── README.md           # Documentação do projeto
+
+
+hoje percebi que sou pessimo no github kkkkk
