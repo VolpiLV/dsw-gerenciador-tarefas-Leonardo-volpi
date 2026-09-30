@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -19,6 +19,10 @@ interface Usuario {
     email: string;
     senha: string;
 }
+interface AuthRequest extends Request {
+usuarioId?: number; // Injetaremos o ID aqui após validar o token
+}
+
 
 // 2. Centralizamos as regras. Se a regra mudar, mudamos em um só lugar!
 const PRIORIDADES = ["low", "medium", "high"] as const;
@@ -61,8 +65,11 @@ CREATE TABLE IF NOT EXISTS tarefas (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 titulo TEXT NOT NULL,
 status TEXT DEFAULT 'pending',
-prioridade TEXT DEFAULT 'medium'
+prioridade TEXT DEFAULT 'medium',
+usuario_id INTEGER NOT NULL, /* <-- ADICIONAMOS O VÍNCULO AQUI */
+FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
 );
+
 CREATE TABLE IF NOT EXISTS usuarios (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 email TEXT UNIQUE NOT NULL, /* <-- ADICIONAMOS O UNIQUE AQUI */
