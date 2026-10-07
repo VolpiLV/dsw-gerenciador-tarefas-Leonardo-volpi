@@ -1,15 +1,32 @@
-import Botao from "./Botao";
+import { useState } from 'react';
 
-function App(){
+function App() {
+  const [estaLigado, setEstaLigado] = useState(false);
+  
   return (
-    <div>
-      <h1>Minha pagina com componentes coustomisados </h1>
-      <p>Abaixo componente botao customizado via props: </p>
-
-      <Botao texto="confirmar" cor="#28a745" />
-
-    </div>
+    <div style={{
+      padding: '40px',
+      fontFamily: 'sans-serif',
+      textAlign: 'center',
+      backgroundColor: estaLigado ? '#ffffff' : '#000000',
+      color: estaLigado ? 'black' : 'white',
+      height: '100vh'
+    }}>
+      <h1>A lâmpada está: {estaLigado ? ' ACESA' : ' APAGADA'}</h1>
+      <button
+        onClick={() => setEstaLigado(!estaLigado)}
+        style={{
+          padding: '12px 24px',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          marginTop: '20px'
+        }}
+      >
+        {estaLigado ? 'Apagar Luz' : 'Ligar Luz'}
+      </button>
+    </div >
   );
-};
+}
 
-export default App ;
+export default App;

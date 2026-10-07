@@ -12,12 +12,12 @@ function Botao(props){
     };
 
     return (
-        button <style = (estilodobotao)>
-        {props.texto}
-    
+        <button> style=(estilodobotao)>
+            {props.texto}
+        </button>
     );
 
     
+}
 
-
-};
+export default Botao;
