@@ -1,163 +1,262 @@
-### Listar todas as tarefas
-GET http://localhost:3000/api/tasks
-
-### Criar uma nova tarefa
-POST http://localhost:3000/api/tasks
-Content-Type: application/json
-
-{
-  "title": "Nova tarefa de teste"
-}
-
-### Deletar uma tarefa (troque o :id pelo id real retornado no POST)
-DELETE http://localhost:3000/api/tasks/1
-
-
+### =====================================================================
+### Gerenciador de Tarefas — testes da API (extensão REST Client do VS Code)
+### =====================================================================
 ###
-GET http://localhost:3000/api/tasks?search=' UNION SELECT id, email, senha FROM usuarios --
+### Ordem sugerida:
+###   1. Rode o servidor:  npm run dev
+###   2. Execute o "Cadastro" e depois o "Login"
+###   3. Copie o token da resposta do login para a variável @token abaixo
+###   4. Rode os testes de tarefas
 
-###
-POST http://localhost:3000/api/tasks
+@base = http://localhost:3000
+@token = COLE_O_TOKEN_AQUI
+
+
+### =====================================================================
+### Rotas públicas
+### =====================================================================
+
+### Health check (mostra também qual banco está em uso)
+GET {{base}}/api/health
+
+### Versão
+GET {{base}}/api/version
+
+### Rota /api inexistente -> 404 em JSON
+GET {{base}}/api/nao-existe
+
+
+### =====================================================================
+### Autenticação
+### =====================================================================
+
+### Cadastro -> 201
+POST {{base}}/api/auth/register
 Content-Type: application/json
 
 {
-  "title":"estudar react",
-  "prioridade":"high"
+  "email": "leonardo@teste.com",
+  "senha": "senha123"
 }
-### ============================================ 
-### DESAFIO CRUD: Atualização de Tarefas (PUT)
-### ============================================ 
 
-### Cenário 1: Atualização Total com Sucesso
-PUT http://localhost:3000/api/tasks/1
+### Cadastro repetido -> 409 (e-mail já cadastrado)
+POST {{base}}/api/auth/register
 Content-Type: application/json
 
 {
-  "title": "Estudar Node.js, SQLite e fazer deploy",
-  "prioridade": "high",
-  "status": "completed"
+  "email": "leonardo@teste.com",
+  "senha": "outraSenha"
 }
 
-
-### Cenário 2: Erro - Título apenas com espaços
-PUT http://localhost:3000/api/tasks/1
+### Cadastro com senha curta -> 400
+POST {{base}}/api/auth/register
 Content-Type: application/json
 
-{ "title": "   ", "prioridade": "low" }
+{
+  "email": "curta@teste.com",
+  "senha": "123"
+}
 
-
-### Cenário 3: Erro - Título curto (Abaixo de 3 caracteres)
-PUT http://localhost:3000/api/tasks/1
+### Cadastro com e-mail inválido -> 400
+POST {{base}}/api/auth/register
 Content-Type: application/json
 
-{ "title": "Go", "prioridade": "medium" }
+{
+  "email": "sem-arroba",
+  "senha": "senha123"
+}
 
-
-### Cenário 4: Erro - ID inexistente (Deve retornar 404)
-PUT http://localhost:3000/api/tasks/9999
+### Login -> 200 com { token }
+POST {{base}}/api/auth/login
 Content-Type: application/json
 
-{ "title": "Tarefa fantasma", "prioridade": "medium", "status": "pending" }
+{
+  "email": "leonardo@teste.com",
+  "senha": "senha123"
+}
 
-
-### Cenário 5: Erro - ID de texto inválido (Deve retornar 400)
-PUT http://localhost:3000/api/tasks/abc
+### Login aceitando o campo "password" -> 200
+POST {{base}}/api/auth/login
 Content-Type: application/json
 
-{ "title": "ID incorreto na rota", "prioridade": "medium" }
+{
+  "email": "leonardo@teste.com",
+  "password": "senha123"
+}
 
-### ============================================ 
-### DESAFIO CRUD: Atualização Parcial (PATCH)
-### ============================================ 
-
-
-### Cenário 1: Atualizar APENAS o status
-PATCH http://localhost:3000/api/tasks/1
+### Login com senha errada -> 401
+POST {{base}}/api/auth/login
 Content-Type: application/json
 
-{ "status": "pending" }
+{
+  "email": "leonardo@teste.com",
+  "senha": "errada"
+}
 
-
-### Cenário 2: Atualizar APENAS o título
-PATCH http://localhost:3000/api/tasks/1
-Content-Type: application/json
-
-{ "title": "Novo título atualizado via PATCH" }
-
-
-### Cenário 3: Erro - PATCH com título inválido
-PATCH http://localhost:3000/api/tasks/1
-Content-Type: application/json
-
-{ "title": "  Ab  " }
-
-
-### Cenário 4: Erro - Prioridade inexistente
-PATCH http://localhost:3000/api/tasks/1
-Content-Type: application/json
-
-{ "prioridade": "super_urgent" }
-
-
-### Cenário 5: Erro - Corpo da requisição vazio
-PATCH http://localhost:3000/api/tasks/1
+### Login sem campos -> 400
+POST {{base}}/api/auth/login
 Content-Type: application/json
 
 {}
-### Teste 1: Deleção de Sucesso
-# Alterar o número '1' no final da URL para um ID 
-#que você sabe que existe no seu banco
-DELETE http://localhost:3000/api/tasks/1
-###
-### Teste 2: Deleção de Falha (ID Inexistente)
-# Este teste valida o erro 404 e a mensagem customizada
-# do seu 'if (resultado.changes === 0)'
-DELETE http://localhost:3000/api/tasks/99999
 
-### Testes de Autenticação
 
-### 35. Registro com Sucesso (deve retornar 201)
-POST http://localhost:3000/api/auth/register
+### =====================================================================
+### Proteção das rotas
+### =====================================================================
+
+### Sem token -> 401
+GET {{base}}/api/tasks
+
+### Token mal formatado (sem "Bearer") -> 401
+GET {{base}}/api/tasks
+Authorization: {{token}}
+
+### Token inválido -> 401
+GET {{base}}/api/tasks
+Authorization: Bearer token.falso.qualquer
+
+
+### =====================================================================
+### Tarefas (CRUD do usuário logado)
+### =====================================================================
+
+### Criar tarefa -> 201
+POST {{base}}/api/tasks
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
-"email": "aluno@senai.com",
-"senha": "minhaSenhaSegura123"
+  "titulo": "Estudar React",
+  "prioridade": "high"
 }
 
-### 36. Quebrando a Validação: Senha muito curta (deve retornar 400)
-POST http://localhost:3000/api/auth/register
+### Criar com prioridade inválida -> 201 com prioridade "medium"
+POST {{base}}/api/tasks
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
-"email": "teste@senai.com",
-"senha": "123"
+  "titulo": "Revisar TypeScript",
+  "prioridade": "urgentissima"
 }
 
-### 37. Testando a Duplicidade: E-mail já cadastrado (deve retornar
-409)
-# Execute o teste 35 novamente e depois este aqui. O banco deve barrar!
-POST http://localhost:3000/api/auth/register
+### Criar com título curto -> 400
+POST {{base}}/api/tasks
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
-"email": "aluno@senai.com",
-"senha": "outrasenha456"
-}### 38. Login com Sucesso (deve retornar o Token JWT)
-# Guarde o "token" gerado na resposta, vamos usá-lo na próxima aula!
-POST http://localhost:3000/api/auth/login
-Content-Type: application/json
-
-{
-"email": "aluno@senai.com",
-"senha": "minhaSenhaSegura123"
+  "titulo": "AB"
 }
 
-### 39. Login com Senha Incorreta (deve retornar 401)
-POST http://localhost:3000/api/auth/login
+### Criar com título numérico (type guard) -> 400
+POST {{base}}/api/tasks
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
-"email": "aluno@senai.com",
-"senha": "senhaerrada"
+  "titulo": 123
 }
+
+### Listar tarefas do usuário
+GET {{base}}/api/tasks
+Authorization: Bearer {{token}}
+
+### Buscar por título
+GET {{base}}/api/tasks?search=react
+Authorization: Bearer {{token}}
+
+### Busca com array (?search=a&search=b) -> ignora e lista tudo
+GET {{base}}/api/tasks?search=a&search=b
+Authorization: Bearer {{token}}
+
+### Tentativa de SQL Injection na busca -> tratada como texto comum
+GET {{base}}/api/tasks?search=' UNION SELECT id, email, senha_hash FROM usuarios --
+Authorization: Bearer {{token}}
+
+### PUT (atualização completa) -> 200
+PUT {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "Estudar React com TypeScript",
+  "prioridade": "medium",
+  "status": "completed"
+}
+
+### PUT sem título válido -> 400
+PUT {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "  ",
+  "status": "pending"
+}
+
+### PUT em tarefa inexistente (ou de outro usuário) -> 404
+PUT {{base}}/api/tasks/9999
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "Não existe",
+  "prioridade": "low",
+  "status": "pending"
+}
+
+### PATCH só status -> 200
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "pending"
+}
+
+### PATCH só prioridade -> 200
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "prioridade": "low"
+}
+
+### PATCH com status fora da lista -> 400
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "cancelled"
+}
+
+### PATCH com corpo vazio -> 400
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{}
+
+### PATCH com ID inválido -> 400
+PATCH {{base}}/api/tasks/abc
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "completed"
+}
+
+### DELETE -> 200
+DELETE {{base}}/api/tasks/1
+Authorization: Bearer {{token}}
+
+### DELETE em tarefa inexistente -> 404
+DELETE {{base}}/api/tasks/9999
+Authorization: Bearer {{token}}
+
+### DELETE com ID inválido -> 400
+DELETE {{base}}/api/tasks/abc
+Authorization: Bearer {{token}}

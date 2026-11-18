@@ -1,26 +1,13 @@
 {
-    "compilerOptions": {
-        "rootDir": "./",
-        "noEmit": true,
-        "module": "nodenext",
-        "moduleResolution": "nodenext",
-        "target": "esnext",
-        "strict": true,
-        "skipLibCheck": true,
-        "jsx": "react-jsx",
-        "verbatimModuleSyntax": true,
-        "isolatedModules": true,
-        "moduleDetection": "force",
-        "types": [
-            "node"
-        ]
-    },
-    "include": [
-        "src/**/*",
-        "server.ts"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist"
-    ]
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["server.ts"]
 }

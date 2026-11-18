@@ -1,0 +1,18 @@
+/* Tailwind v4: a configuração fica no próprio CSS, sem tailwind.config.js. */
+@import "tailwindcss";
+
+/* Tema escuro como base de todas as telas. */
+body {
+  background-color: var(--color-slate-950);
+  color: var(--color-slate-100);
+}
+
+/* Quem desativou animações no sistema não vê transições. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
