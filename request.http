@@ -22,6 +22,9 @@ GET {{base}}/api/health
 ### Versão
 GET {{base}}/api/version
 
+### Diagnóstico do banco: tabelas e quantidade de registros (sem expor dados)
+GET {{base}}/api/db-check
+
 ### Rota /api inexistente -> 404 em JSON
 GET {{base}}/api/nao-existe
 

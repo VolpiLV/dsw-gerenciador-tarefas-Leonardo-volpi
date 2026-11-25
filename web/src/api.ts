@@ -1,82 +1,104 @@
 /**
- * api.ts — toda a comunicação do front com o server.ts passa por aqui.
+ * api.ts — camada de rede do front-end.
  *
- * Conteúdo:
- *   - tipos que a API devolve
- *   - guarda do token JWT no localStorage
- *   - função genérica que transforma a resposta HTTP em dado ou erro
- *   - chamadas de autenticação e do CRUD de tarefas
+ * É o ÚNICO arquivo que conhece o endereço da API e que mexe no token JWT
+ * guardado no localStorage. Os componentes só chamam as funções daqui.
+ *
+ * Organização:
+ *   1. Endereço da API e tipos (o "contrato" com o back-end)
+ *   2. Token JWT: guardar, ler, apagar e descobrir quem está logado
+ *   3. Requisição central (interceptor): Bearer, erros e sessão expirada
+ *   4. Autenticação
+ *   5. Tarefas (CRUD)
  */
 
 // ---------------------------------------------------------------------------
-// Endereço da API
+// 1. Endereço da API e tipos
 // ---------------------------------------------------------------------------
 
 /**
- * Em desenvolvimento o Vite roda na porta 5173 e a API na 3000, então o
- * endereço precisa ser completo. Depois do build quem entrega a página é o
- * próprio server.ts, então página e API ficam na mesma origem e basta o
- * caminho relativo ("/api/...").
+ * Ambiente dinâmico:
+ *   - dev  -> o Vite roda na 5173 e a API na 3000, então o endereço é completo;
+ *   - prod -> o próprio server.ts entrega o front, página e API ficam na mesma
+ *             origem e o caminho relativo ("/api/...") basta. Assim o mesmo
+ *             build funciona em qualquer IP ou domínio sem recompilar.
  */
-const BASE_URL = import.meta.env.DEV ? "http://localhost:3000" : "";
+const API_BASE = import.meta.env.DEV ? "http://localhost:3000" : "";
 
-const CHAVE_TOKEN = "gerenciador-tarefas:token";
+const TOKEN_KEY = "gerenciador-tarefas:token";
 
-// ---------------------------------------------------------------------------
-// Tipos
-// ---------------------------------------------------------------------------
-
-export type Prioridade = "low" | "medium" | "high";
-export type Status = "pending" | "completed";
-
+/** Contrato da tarefa: os mesmos campos da tabela `tarefas` do server.ts. */
 export interface Tarefa {
   id: number;
+  usuario_id: number;
   titulo: string;
-  status: Status;
-  prioridade: Prioridade;
+  descricao: string | null;
+  status: "pending" | "completed";
+  prioridade: "low" | "medium" | "high";
+  criado_em: string;
+  atualizado_em: string;
 }
 
+/** Tipos derivados: se o contrato mudar, a tela acompanha sozinha. */
+export type Prioridade = Tarefa["prioridade"];
+export type Status = Tarefa["status"];
+
+/** Quem está logado, lido de dentro do token. */
 export interface Usuario {
   id: number;
   email: string;
 }
 
-interface RespostaLogin {
+/** O que POST /api/auth/login devolve. */
+export interface AuthResult {
   token: string;
 }
 
-// ---------------------------------------------------------------------------
-// Token
-// ---------------------------------------------------------------------------
-
-export const salvarToken = (token: string): void => localStorage.setItem(CHAVE_TOKEN, token);
-export const lerToken = (): string | null => localStorage.getItem(CHAVE_TOKEN);
-export const apagarToken = (): void => localStorage.removeItem(CHAVE_TOKEN);
-
-/** Cabeçalhos com JSON + `Authorization: Bearer <token>` quando houver login. */
-const cabecalhos = (): Record<string, string> => {
-  const token = lerToken();
-  return token
-    ? { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
-    : { "Content-Type": "application/json" };
-};
+/** O que POST /api/auth/register devolve. */
+export interface RegistroResult {
+  id: number;
+  email: string;
+}
 
 /**
- * Lê o e-mail e o id de dentro do token, só para mostrar na tela.
- *
- * Isso NÃO valida o token: a assinatura só pode ser conferida pelo servidor.
- * Se o token estiver quebrado ou vencido, ele é apagado e voltamos ao login.
+ * Erro específico para token vencido ou inválido (HTTP 401).
+ * O componente reconhece esse tipo e manda a pessoa de volta ao login.
  */
-export const usuarioLogado = (): Usuario | null => {
-  const token = lerToken();
+export class SessaoExpiradaError extends Error {
+  constructor() {
+    super("Sua sessão expirou. Faça login novamente.");
+    this.name = "SessaoExpiradaError";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Token JWT
+// ---------------------------------------------------------------------------
+
+export const setToken = (token: string): void => localStorage.setItem(TOKEN_KEY, token);
+export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
+export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY);
+
+/**
+ * Descobre quem está logado decodificando o payload do token.
+ *
+ * Decodificar NÃO é validar: o payload é só Base64Url, qualquer um lê e
+ * edita. Quem confere a assinatura é o server.ts com o JWT_SECRET. Aqui o
+ * token serve só para mostrar o e-mail na tela.
+ *
+ * Token quebrado ou vencido é apagado e a pessoa volta para o login.
+ */
+export const getUsuario = (): Usuario | null => {
+  const token = getToken();
   if (!token) return null;
 
   try {
-    const [, payloadBase64Url] = token.split(".");
-    if (!payloadBase64Url) throw new Error("token sem payload");
+    // Um JWT tem 3 partes: cabeçalho.payload.assinatura
+    const partes = token.split(".");
+    if (partes.length !== 3) throw new Error("token mal formado");
 
     // Base64Url -> Base64 e decodificação respeitando acentos (UTF-8).
-    const base64 = payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     const payload = JSON.parse(new TextDecoder().decode(bytes)) as {
       id?: unknown;
@@ -87,75 +109,98 @@ export const usuarioLogado = (): Usuario | null => {
     if (typeof payload.id !== "number" || typeof payload.email !== "string") {
       throw new Error("payload inesperado");
     }
+    // exp vem em segundos; Date.now() em milissegundos.
     if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
       throw new Error("token expirado");
     }
 
     return { id: payload.id, email: payload.email };
   } catch {
-    apagarToken();
+    clearToken();
     return null;
   }
 };
 
 // ---------------------------------------------------------------------------
-// Requisição genérica
+// 3. Requisição central (padrão interceptor)
 // ---------------------------------------------------------------------------
 
 /**
- * Faz o fetch e devolve o JSON. Se o status não for 2xx, lança um Error com a
- * mensagem `{ error }` enviada pelo back, para o componente só usar try/catch.
+ * Toda chamada passa por aqui. Ela:
+ *   - anexa `Authorization: Bearer <token>` quando existe login;
+ *   - lê o corpo como texto antes do JSON.parse (204 ou HTML não quebram);
+ *   - transforma status fora de 2xx em Error com a mensagem `{ error }` do back;
+ *   - trata 401 em rota privada: apaga o token e lança SessaoExpiradaError.
  */
 async function requisitar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
-  const resposta = await fetch(`${BASE_URL}${caminho}`, {
+  const token = getToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${caminho}`, {
     ...opcoes,
-    headers: { ...cabecalhos(), ...(opcoes.headers ?? {}) },
+    headers: { ...headers, ...(opcoes.headers as Record<string, string> | undefined) },
   });
 
-  const texto = await resposta.text();
-  let corpo: unknown = null;
+  // Token enviado e recusado = sessão morta. (401 no login é senha errada,
+  // por isso só vale quando havia token.)
+  if (res.status === 401 && token) {
+    clearToken();
+    throw new SessaoExpiradaError();
+  }
+
+  const texto = await res.text();
+  let dados: unknown;
   try {
-    corpo = texto ? JSON.parse(texto) : null;
+    dados = texto ? JSON.parse(texto) : null;
   } catch {
-    corpo = null; // resposta que não é JSON
+    dados = null; // resposta que não é JSON (ex.: página de erro em HTML)
   }
 
-  if (!resposta.ok) {
-    const mensagem = (corpo as { error?: string } | null)?.error;
-    throw new Error(mensagem ?? `Falha na requisição (HTTP ${resposta.status}).`);
+  if (!res.ok) {
+    const mensagem = (dados as { error?: string } | null)?.error;
+    throw new Error(mensagem ?? `Falha na requisição (HTTP ${res.status}).`);
   }
 
-  return corpo as T;
+  // 204 No Content ou corpo vazio: não há o que devolver.
+  if (res.status === 204 || texto === "") return undefined as T;
+
+  return dados as T;
 }
 
 // ---------------------------------------------------------------------------
-// Autenticação
+// 4. Autenticação
 // ---------------------------------------------------------------------------
 
-export async function entrar(email: string, senha: string): Promise<void> {
-  const { token } = await requisitar<RespostaLogin>("/api/auth/login", {
+/** POST /api/auth/login — guarda o token se der certo. */
+export async function login(email: string, senha: string): Promise<AuthResult> {
+  const dados = await requisitar<AuthResult>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, senha }),
   });
-  salvarToken(token);
+  setToken(dados.token);
+  return dados;
 }
 
-export async function cadastrar(email: string, senha: string): Promise<Usuario> {
-  return requisitar<Usuario>("/api/auth/register", {
+/** POST /api/auth/register — só cria a conta; o login vem em seguida. */
+export function registrar(email: string, senha: string): Promise<RegistroResult> {
+  return requisitar<RegistroResult>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, senha }),
   });
 }
 
 // ---------------------------------------------------------------------------
-// Tarefas
+// 5. Tarefas
 // ---------------------------------------------------------------------------
 
-export function listarTarefas(busca = ""): Promise<Tarefa[]> {
-  const query = busca ? `?search=${encodeURIComponent(busca)}` : "";
+/** GET /api/tasks?search= — tarefas do usuário logado. */
+export function listarTarefas(search = ""): Promise<Tarefa[]> {
+  const query = search ? `?search=${encodeURIComponent(search)}` : "";
   return requisitar<Tarefa[]>(`/api/tasks${query}`);
 }
 
+/** POST /api/tasks */
 export function criarTarefa(titulo: string, prioridade: Prioridade): Promise<Tarefa> {
   return requisitar<Tarefa>("/api/tasks", {
     method: "POST",
@@ -163,6 +208,7 @@ export function criarTarefa(titulo: string, prioridade: Prioridade): Promise<Tar
   });
 }
 
+/** PATCH /api/tasks/:id — envia só os campos que mudaram. */
 export function atualizarTarefa(
   id: number,
   campos: Partial<Pick<Tarefa, "titulo" | "status" | "prioridade">>,
@@ -173,6 +219,7 @@ export function atualizarTarefa(
   });
 }
 
-export function excluirTarefa(id: number): Promise<{ message: string }> {
+/** DELETE /api/tasks/:id */
+export function deletarTarefa(id: number): Promise<{ message: string }> {
   return requisitar<{ message: string }>(`/api/tasks/${id}`, { method: "DELETE" });
 }

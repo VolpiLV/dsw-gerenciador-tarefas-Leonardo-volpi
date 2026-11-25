@@ -273,7 +273,32 @@ app.get("/api/health", async (_req, res) => {
 });
 
 app.get("/api/version", (_req, res) => {
-    res.json({ appName: "Gerenciador de Tarefas Multi-Usuário", version: "1.1.0", banco: DESCRICAO_BANCO });
+    res.json({ appName: "Gerenciador de Tarefas Multi-Usuário", version: "1.2.0", banco: DESCRICAO_BANCO });
+});
+
+/**
+ * Diagnóstico do banco: confirma a conexão e conta os registros de cada
+ * tabela. Só devolve números, nunca o conteúdo (e-mails, senhas, tarefas).
+ */
+app.get("/api/db-check", async (_req, res) => {
+    try {
+        await db.execute("SELECT 1");
+        const { rows } = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        );
+        const tabelas = rows.map((linha) => String(linha.name));
+
+        const contagem: Record<string, number> = {};
+        for (const tabela of tabelas) {
+            // O nome vem do próprio sqlite_master, não do usuário.
+            const r = await db.execute(`SELECT COUNT(*) AS total FROM "${tabela}"`);
+            contagem[tabela] = Number(r.rows[0]?.total ?? 0);
+        }
+
+        return res.json({ ok: true, banco: DESCRICAO_BANCO, tabelas, contagem });
+    } catch {
+        return res.status(503).json({ ok: false, banco: DESCRICAO_BANCO, error: "Não foi possível consultar o banco." });
+    }
 });
 
 /** Lê a senha aceitando os dois nomes de campo usados nos testes. */
@@ -324,7 +349,8 @@ app.post("/api/auth/login", async (req, res) => {
             return res.status(401).json({ error: "Credenciais inválidas." });
         }
 
-        const token = jwt.sign({ id: usuario.id, email: usuario.email }, JWT_SECRET, { expiresIn: "8h" });
+        // Stateless: o servidor não guarda sessão, só confere a assinatura depois.
+        const token = jwt.sign({ id: usuario.id, email: usuario.email }, JWT_SECRET, { expiresIn: "7d" });
         return res.json({ token });
     } catch (erro) {
         console.error("Falha no login:", erro);
@@ -512,8 +538,11 @@ async function iniciar(): Promise<void> {
     app.listen(PORT, () => {
         console.log("------------------------------------------------------------");
         console.log(` Banco : ${DESCRICAO_BANCO}`);
+        console.log(` Onde  : ${NA_NUVEM ? TURSO_URL : path.resolve("tarefas.db")}`);
+        console.log(` Token : ${NA_NUVEM ? "presente (nunca é mostrado)" : "não informado"}`);
         if (!NA_NUVEM) console.log(" (para usar o Turso, preencha TURSO_URL e TURSO_TOKEN no .env)");
         console.log(` API   : http://localhost:${PORT}/api/health`);
+        console.log(` Check : http://localhost:${PORT}/api/db-check`);
         console.log(` Front : http://localhost:${PORT}`);
         console.log("------------------------------------------------------------");
         avisarSobreFront();

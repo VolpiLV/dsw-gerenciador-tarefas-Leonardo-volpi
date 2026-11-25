@@ -2,20 +2,23 @@
  * Tarefas.tsx — tela principal depois do login.
  *
  * Partes da tela:
- *   - cabeçalho com o e-mail do usuário e o botão Sair
- *   - formulário para criar tarefa (título + prioridade)
- *   - campo de busca com debounce
- *   - lista com contadores, concluir/reabrir e excluir
- *   - modal de confirmação antes de excluir
+ *   1. cabeçalho  — e-mail de quem está conectado e botão Sair
+ *   2. formulário — título + prioridade da nova tarefa
+ *   3. busca      — por título, com debounce (vai para a API)
+ *   4. filtro     — chips por prioridade (local, sem chamar a API)
+ *   5. lista      — contadores, concluir/reabrir e excluir
+ *   6. modal      — confirmação antes de excluir
  */
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   atualizarTarefa,
   criarTarefa,
-  excluirTarefa,
+  deletarTarefa,
   listarTarefas,
+  SessaoExpiradaError,
   type Prioridade,
+  type Status,
   type Tarefa,
   type Usuario,
 } from "./api";
@@ -24,105 +27,181 @@ import {
 // Constantes de apresentação
 // ---------------------------------------------------------------------------
 
-/** A API usa os valores em inglês; a tela mostra em português. */
-const ROTULO_PRIORIDADE: Record<Prioridade, string> = {
+/**
+ * Dicionário tipado: a API fala inglês, a tela fala português.
+ * Record<Prioridade, string> obriga a traduzir 100% dos valores aceitos.
+ * Se o contrato ganhar uma prioridade nova, o tsc reclama aqui.
+ */
+const PRIORIDADES_PT: Record<Prioridade, string> = {
   low: "Baixa",
   medium: "Média",
   high: "Alta",
 };
 
-const ESTILO_PRIORIDADE: Record<Prioridade, string> = {
-  low: "bg-slate-700/60 text-slate-300 ring-slate-600",
+/** Cores semânticas do badge: verde baixa, amarelo média, vermelho alta. */
+const COR_PRIORIDADE: Record<Prioridade, string> = {
+  low: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
   medium: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
   high: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
 };
 
-const OPCOES_PRIORIDADE: Prioridade[] = ["low", "medium", "high"];
+/** Ordem das opções no <select>. */
+const PRIORIDADES: Prioridade[] = ["low", "medium", "high"];
 
-/** Novas tarefas começam como prioridade Alta. */
-const PRIORIDADE_INICIAL: Prioridade = "high";
+/** Filtro local: "todas" ou uma das prioridades do contrato. */
+type FiltroPrioridade = "todas" | Prioridade;
+const FILTROS: FiltroPrioridade[] = ["todas", ...PRIORIDADES];
 
-/** Tempo sem digitar antes de disparar a busca. */
-const ESPERA_BUSCA_MS = 400;
+/** Mesma prioridade padrão do back-end. */
+const PRIORIDADE_INICIAL: Prioridade = "medium";
+
+/** Tempo sem digitar antes de aplicar a busca. */
+const DEBOUNCE_MS = 400;
 
 const CLASSE_CAMPO =
   "w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:border-slate-500 focus:outline-none";
 
-const textoDoErro = (e: unknown, padrao: string): string => (e instanceof Error ? e.message : padrao);
+const mensagemDe = (e: unknown, padrao: string): string => (e instanceof Error ? e.message : padrao);
 
 // ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
 
 interface TarefasProps {
+  /** Quem está logado — vem do App, que decodificou o token. */
   usuario: Usuario;
-  aoSair: () => void;
+  /** Avisa o App para encerrar a sessão (quem apaga o token é o App). */
+  aoSair: (mensagem?: string) => void;
 }
 
 export default function Tarefas({ usuario, aoSair }: TarefasProps) {
+  // --- dados ---------------------------------------------------------------
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
-  // `textoBusca` muda a cada tecla; `termo` só muda depois do debounce
-  // e é ele que vai para a API.
-  const [textoBusca, setTextoBusca] = useState("");
-  const [termo, setTermo] = useState("");
+  // --- busca ---------------------------------------------------------------
+  // `busca` muda a cada tecla (input fluido); `buscaAplicada` só muda depois
+  // do debounce, e é ela que vai para a API.
+  const [busca, setBusca] = useState("");
+  const [buscaAplicada, setBuscaAplicada] = useState("");
 
+  // --- formulário de criação ----------------------------------------------
   const [titulo, setTitulo] = useState("");
   const [prioridade, setPrioridade] = useState<Prioridade>(PRIORIDADE_INICIAL);
-  const [salvando, setSalvando] = useState(false);
+  const [criando, setCriando] = useState(false);
 
-  const [tarefaParaExcluir, setTarefaParaExcluir] = useState<Tarefa | null>(null);
+  // --- filtro e modal ------------------------------------------------------
+  const [filtroPrioridade, setFiltroPrioridade] = useState<FiltroPrioridade>("todas");
+  const [paraExcluir, setParaExcluir] = useState<Tarefa | null>(null);
 
   /**
-   * Contador de requisições. Cada carga recebe um número e só a mais recente
-   * pode atualizar a lista — assim uma resposta atrasada de uma busca antiga
-   * não sobrescreve o resultado certo.
+   * Trata qualquer erro das chamadas. Se for sessão expirada (401), devolve
+   * a pessoa para o login com o aviso; senão mostra a mensagem na tela.
    */
-  const ultimaRequisicao = useRef(0);
+  const tratarErro = useCallback(
+    (e: unknown, padrao: string): void => {
+      if (e instanceof SessaoExpiradaError) {
+        aoSair(e.message);
+        return;
+      }
+      setErro(mensagemDe(e, padrao));
+    },
+    [aoSair],
+  );
 
-  const recarregar = useCallback(async (): Promise<void> => {
-    const minha = ++ultimaRequisicao.current;
+  /**
+   * Controle de concorrência. Cada carga recebe um número; só a mais recente
+   * pode mexer na lista. Assim a resposta atrasada da busca "c" não
+   * sobrescreve o resultado de "ca".
+   *
+   * É useRef (e não useState) porque mudar o contador não precisa redesenhar
+   * a tela, e o callback assíncrono sempre lê o valor atual em .current.
+   */
+  const requisicaoAtual = useRef(0);
+
+  /** Último termo realmente aplicado — só é lido dentro do timer. */
+  const ultimaBusca = useRef("");
+
+  /**
+   * Recarrega a lista depois de criar, concluir ou excluir.
+   * useCallback memoriza a função entre renders e só a recria quando
+   * buscaAplicada muda.
+   */
+  const carregar = useCallback(async (): Promise<void> => {
+    const meuId = ++requisicaoAtual.current;
     try {
-      const dados = await listarTarefas(termo);
-      if (minha !== ultimaRequisicao.current) return;
+      const dados = await listarTarefas(buscaAplicada);
+      // Outra requisição começou enquanto esta viajava: descarta.
+      if (meuId !== requisicaoAtual.current) return;
       setTarefas(dados);
       setErro("");
     } catch (e) {
-      if (minha !== ultimaRequisicao.current) return;
-      setErro(textoDoErro(e, "Não foi possível carregar suas tarefas."));
+      if (meuId !== requisicaoAtual.current) return;
+      tratarErro(e, "Não foi possível carregar suas tarefas.");
     } finally {
-      if (minha === ultimaRequisicao.current) setCarregando(false);
+      if (meuId === requisicaoAtual.current) setCarregando(false);
     }
-  }, [termo]);
+  }, [buscaAplicada, tratarErro]);
 
-  /** Último termo enviado à API — usado só dentro do timer, por isso é ref. */
-  const termoEnviado = useRef("");
-
-  // Debounce: só aplica o termo quando a pessoa para de digitar.
-  // Se o termo não mudou (ex.: na montagem), não liga o "carregando",
-  // senão a tela ficaria presa em "Carregando..." sem nenhuma busca nova.
+  /**
+   * Debounce ("efeito máquina de escrever"). A função de limpeza cancela o
+   * timer anterior se outra tecla for digitada antes de 400 ms. Digitar
+   * "comprar" gera 1 requisição em vez de 7.
+   *
+   * O setCarregando fica dentro do timer e depois do `if`: se o termo não
+   * mudou (ex.: na montagem), nenhuma busca sai e a tela não pode ficar
+   * presa em "Carregando...".
+   */
   useEffect(() => {
     const timer = setTimeout(() => {
-      const novo = textoBusca.trim();
-      if (novo === termoEnviado.current) return;
-      termoEnviado.current = novo;
+      const termo = busca.trim();
+      if (termo === ultimaBusca.current) return;
+      ultimaBusca.current = termo;
       setCarregando(true);
-      setTermo(novo);
-    }, ESPERA_BUSCA_MS);
-    return () => clearTimeout(timer);
-  }, [textoBusca]);
+      setBuscaAplicada(termo);
+    }, DEBOUNCE_MS);
 
-  // Busca na montagem e sempre que o termo aplicado mudar.
+    return () => clearTimeout(timer);
+  }, [busca]);
+
+  /**
+   * Busca na montagem e sempre que a busca aplicada mudar.
+   *
+   * O estado só é tocado dentro dos callbacks do .then (padrão recomendado
+   * pelo React para buscar dados em efeito). São duas travas:
+   *   - `ativo`: limpeza do efeito; se a busca mudar ou a tela sair antes da
+   *     resposta, ela é ignorada;
+   *   - `requisicaoAtual`: descarta respostas fora de ordem, inclusive as
+   *     disparadas pelos botões (criar, concluir, excluir).
+   */
   useEffect(() => {
-    void recarregar();
-  }, [recarregar]);
+    const meuId = ++requisicaoAtual.current;
+    let ativo = true;
+
+    listarTarefas(buscaAplicada).then(
+      (dados) => {
+        if (!ativo || meuId !== requisicaoAtual.current) return;
+        setTarefas(dados);
+        setErro("");
+        setCarregando(false);
+      },
+      (e: unknown) => {
+        if (!ativo || meuId !== requisicaoAtual.current) return;
+        tratarErro(e, "Não foi possível carregar suas tarefas.");
+        setCarregando(false);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [buscaAplicada, tratarErro]);
 
   // --- ações ---------------------------------------------------------------
 
-  const adicionar = async (evento: FormEvent<HTMLFormElement>): Promise<void> => {
-    evento.preventDefault();
+  const criar = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
 
     const tituloLimpo = titulo.trim();
     if (tituloLimpo.length < 3) {
@@ -131,55 +210,67 @@ export default function Tarefas({ usuario, aoSair }: TarefasProps) {
     }
 
     setErro("");
-    setSalvando(true);
+    setCriando(true);
     try {
       await criarTarefa(tituloLimpo, prioridade);
       setTitulo("");
       setPrioridade(PRIORIDADE_INICIAL);
-      await recarregar();
+      await carregar();
     } catch (e) {
-      setErro(textoDoErro(e, "Não foi possível criar a tarefa."));
+      tratarErro(e, "Não foi possível criar a tarefa.");
     } finally {
-      setSalvando(false);
+      setCriando(false);
     }
   };
 
   const alternarStatus = async (tarefa: Tarefa): Promise<void> => {
+    const novoStatus: Status = tarefa.status === "completed" ? "pending" : "completed";
     setErro("");
     try {
-      await atualizarTarefa(tarefa.id, {
-        status: tarefa.status === "completed" ? "pending" : "completed",
-      });
-      await recarregar();
+      // O await garante a ordem: grava primeiro, depois relê a lista.
+      await atualizarTarefa(tarefa.id, { status: novoStatus });
+      await carregar();
     } catch (e) {
-      setErro(textoDoErro(e, "Não foi possível atualizar a tarefa."));
+      tratarErro(e, "Não foi possível atualizar a tarefa.");
     }
   };
 
-  const confirmarExclusao = async (): Promise<void> => {
-    const alvo = tarefaParaExcluir;
+  const confirmarExcluir = async (): Promise<void> => {
+    const alvo = paraExcluir;
     if (!alvo) return;
 
-    setTarefaParaExcluir(null); // fecha o modal sem esperar a rede
+    setParaExcluir(null); // fecha o modal sem esperar a rede
     setErro("");
     try {
-      await excluirTarefa(alvo.id);
-      await recarregar();
+      await deletarTarefa(alvo.id);
+      await carregar();
     } catch (e) {
-      setErro(textoDoErro(e, "Não foi possível excluir a tarefa."));
+      tratarErro(e, "Não foi possível excluir a tarefa.");
     }
   };
 
-  // Referência estável: o modal usa no useEffect e não deve re-executar a cada render.
-  const fecharModal = useCallback(() => setTarefaParaExcluir(null), []);
+  // Referência estável para o useEffect do modal não re-executar à toa.
+  const fecharModal = useCallback(() => setParaExcluir(null), []);
 
-  // --- números -------------------------------------------------------------
+  // --- números e lista derivada -------------------------------------------
 
+  const total = tarefas.length;
   const concluidas = tarefas.filter((t) => t.status === "completed").length;
-  const pendentes = tarefas.length - concluidas;
+  const pendentes = total - concluidas;
+  const progresso = total === 0 ? 0 : Math.round((concluidas / total) * 100);
+
+  /**
+   * A lista da tela é uma DERIVAÇÃO de tarefas + filtro, não um estado novo.
+   * useMemo só refaz o filter quando um dos dois muda.
+   */
+  const tarefasFiltradas = useMemo(
+    () => (filtroPrioridade === "todas" ? tarefas : tarefas.filter((t) => t.prioridade === filtroPrioridade)),
+    [tarefas, filtroPrioridade],
+  );
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-10">
+      {/* 1. cabeçalho */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">Minhas Tarefas</h1>
@@ -189,16 +280,16 @@ export default function Tarefas({ usuario, aoSair }: TarefasProps) {
         </div>
         <button
           type="button"
-          onClick={aoSair}
+          onClick={() => aoSair()}
           className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white"
         >
           Sair
         </button>
       </header>
 
-      {/* Nova tarefa */}
+      {/* 2. nova tarefa */}
       <form
-        onSubmit={adicionar}
+        onSubmit={criar}
         className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4 sm:flex-row"
       >
         <label className="flex-1">
@@ -220,9 +311,9 @@ export default function Tarefas({ usuario, aoSair }: TarefasProps) {
             onChange={(e) => setPrioridade(e.target.value as Prioridade)}
             className={`${CLASSE_CAMPO} sm:w-auto`}
           >
-            {OPCOES_PRIORIDADE.map((p) => (
+            {PRIORIDADES.map((p) => (
               <option key={p} value={p}>
-                {ROTULO_PRIORIDADE[p]}
+                {PRIORIDADES_PT[p]}
               </option>
             ))}
           </select>
@@ -230,24 +321,46 @@ export default function Tarefas({ usuario, aoSair }: TarefasProps) {
 
         <button
           type="submit"
-          disabled={salvando}
-          className="rounded-md bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-white disabled:opacity-50"
+          disabled={criando}
+          className="flex items-center justify-center gap-2 rounded-md bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {salvando ? "Criando..." : "Nova Tarefa"}
+          {criando && <Spinner escuro />}
+          {criando ? "Criando..." : "Adicionar"}
         </button>
       </form>
 
-      {/* Busca */}
+      {/* 3. busca */}
       <label className="flex flex-col gap-2 text-sm font-medium text-slate-300">
         Buscar por título
         <input
           type="search"
-          value={textoBusca}
-          onChange={(e) => setTextoBusca(e.target.value)}
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
           placeholder="Digite para filtrar..."
           className={CLASSE_CAMPO}
         />
       </label>
+
+      {/* 4. filtro por prioridade (local) */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por prioridade">
+        {FILTROS.map((f) => {
+          const ativo = filtroPrioridade === f;
+          const corAtivo = f === "todas" ? "bg-white/10 text-white ring-white/30" : COR_PRIORIDADE[f];
+          return (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFiltroPrioridade(f)}
+              aria-pressed={ativo}
+              className={`rounded-full px-3 py-1 text-xs font-medium ring-1 transition ${
+                ativo ? corAtivo : "bg-slate-800 text-slate-300 ring-slate-700 hover:bg-slate-700"
+              }`}
+            >
+              {f === "todas" ? "Todas" : PRIORIDADES_PT[f]}
+            </button>
+          );
+        })}
+      </div>
 
       {erro && (
         <div
@@ -266,36 +379,56 @@ export default function Tarefas({ usuario, aoSair }: TarefasProps) {
         </div>
       )}
 
-      {/* Lista */}
+      {/* 5. lista */}
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-        <p aria-live="polite" className="mb-3 text-sm text-slate-400">
-          {carregando ? "Carregando..." : `${pendentes} pendente(s) e ${concluidas} concluída(s).`}
-        </p>
+        <div aria-live="polite" className="mb-3">
+          <p className="text-sm text-slate-400">
+            {carregando ? "Carregando..." : `${pendentes} pendente(s) e ${concluidas} concluída(s).`}
+          </p>
+          {!carregando && total > 0 && (
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800" aria-hidden="true">
+              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progresso}%` }} />
+            </div>
+          )}
+        </div>
 
         {carregando ? (
-          <p className="py-6 text-center text-sm text-slate-500">Buscando suas tarefas...</p>
-        ) : tarefas.length === 0 ? (
-          <ListaVazia termo={termo} />
+          <div className="flex items-center justify-center gap-3 py-8 text-sm text-slate-500">
+            <Spinner />
+            Buscando suas tarefas...
+          </div>
+        ) : total === 0 ? (
+          <ListaVazia busca={buscaAplicada} />
+        ) : tarefasFiltradas.length === 0 ? (
+          <div className="py-10 text-center">
+            <p className="text-slate-300">
+              Nenhuma tarefa com prioridade {filtroPrioridade === "todas" ? "" : PRIORIDADES_PT[filtroPrioridade]}.
+            </p>
+            <button
+              type="button"
+              onClick={() => setFiltroPrioridade("todas")}
+              className="mt-2 text-sm text-slate-400 underline transition hover:text-white"
+            >
+              Mostrar todas
+            </button>
+          </div>
         ) : (
           <ul className="flex max-h-[60vh] list-none flex-col gap-2 overflow-y-auto p-0 pr-1">
-            {tarefas.map((t) => (
+            {tarefasFiltradas.map((t) => (
               <ItemTarefa
                 key={t.id}
                 tarefa={t}
                 aoAlternar={() => void alternarStatus(t)}
-                aoExcluir={() => setTarefaParaExcluir(t)}
+                aoExcluir={() => setParaExcluir(t)}
               />
             ))}
           </ul>
         )}
       </section>
 
-      {tarefaParaExcluir && (
-        <ModalExclusao
-          tarefa={tarefaParaExcluir}
-          aoCancelar={fecharModal}
-          aoConfirmar={() => void confirmarExclusao()}
-        />
+      {/* 6. modal de exclusão */}
+      {paraExcluir && (
+        <ModalExclusao tarefa={paraExcluir} aoCancelar={fecharModal} aoConfirmar={() => void confirmarExcluir()} />
       )}
     </div>
   );
@@ -305,14 +438,25 @@ export default function Tarefas({ usuario, aoSair }: TarefasProps) {
 // Componentes auxiliares
 // ---------------------------------------------------------------------------
 
-function ListaVazia({ termo }: { termo: string }) {
+function Spinner({ escuro = false }: { escuro?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`size-4 animate-spin rounded-full border-2 ${
+        escuro ? "border-slate-900/30 border-t-slate-900" : "border-slate-600 border-t-slate-200"
+      }`}
+    />
+  );
+}
+
+function ListaVazia({ busca }: { busca: string }) {
   return (
     <div className="py-10 text-center">
       <p className="text-slate-300">
-        {termo ? `Nenhuma tarefa contém "${termo}".` : "Nenhuma tarefa por aqui ainda."}
+        {busca ? `Nenhuma tarefa contém "${busca}".` : "Nenhuma tarefa por aqui ainda."}
       </p>
       <p className="mt-1 text-sm text-slate-500">
-        {termo ? "Tente outro termo de busca." : "Use o formulário acima para criar a primeira."}
+        {busca ? "Tente outro termo de busca." : "Use o formulário acima para criar a primeira."}
       </p>
     </div>
   );
@@ -325,18 +469,16 @@ interface ItemTarefaProps {
 }
 
 function ItemTarefa({ tarefa, aoAlternar, aoExcluir }: ItemTarefaProps) {
-  const concluida = tarefa.status === "completed";
+  const feita = tarefa.status === "completed";
 
   return (
     <li className="flex items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
       <div className="min-w-0 flex-1">
-        <p className={`truncate text-sm ${concluida ? "text-slate-500 line-through" : "text-slate-100"}`}>
+        <p className={`truncate text-sm ${feita ? "text-slate-500 line-through" : "text-slate-100"}`}>
           {tarefa.titulo}
         </p>
-        <span
-          className={`mt-1 inline-block rounded px-2 py-0.5 text-xs ring-1 ${ESTILO_PRIORIDADE[tarefa.prioridade]}`}
-        >
-          {ROTULO_PRIORIDADE[tarefa.prioridade]}
+        <span className={`mt-1 inline-block rounded px-2 py-0.5 text-xs ring-1 ${COR_PRIORIDADE[tarefa.prioridade]}`}>
+          {PRIORIDADES_PT[tarefa.prioridade]}
         </span>
       </div>
 
@@ -346,7 +488,7 @@ function ItemTarefa({ tarefa, aoAlternar, aoExcluir }: ItemTarefaProps) {
           onClick={aoAlternar}
           className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:border-slate-500 hover:text-white"
         >
-          {concluida ? "Reabrir" : "Concluir"}
+          {feita ? "Reabrir" : "Concluir"}
         </button>
         <button
           type="button"
@@ -372,12 +514,11 @@ function ModalExclusao({ tarefa, aoCancelar, aoConfirmar }: ModalExclusaoProps) 
 
   useEffect(() => {
     botaoExcluir.current?.focus();
-
-    const aoPressionar = (e: KeyboardEvent): void => {
+    const aoTeclar = (e: KeyboardEvent): void => {
       if (e.key === "Escape") aoCancelar();
     };
-    document.addEventListener("keydown", aoPressionar);
-    return () => document.removeEventListener("keydown", aoPressionar);
+    document.addEventListener("keydown", aoTeclar);
+    return () => document.removeEventListener("keydown", aoTeclar);
   }, [aoCancelar]);
 
   return (
@@ -393,8 +534,7 @@ function ModalExclusao({ tarefa, aoCancelar, aoConfirmar }: ModalExclusaoProps) 
           Excluir esta tarefa?
         </h2>
         <p className="mt-2 text-sm text-slate-400">
-          <span className="text-slate-200">{tarefa.titulo}</span> será removida permanentemente. Não dá para
-          desfazer.
+          <span className="text-slate-200">{tarefa.titulo}</span> será removida permanentemente. Não dá para desfazer.
         </p>
 
         <div className="mt-5 flex justify-end gap-2">
