@@ -1,0 +1,265 @@
+### =====================================================================
+### Gerenciador de Tarefas — testes da API (extensão REST Client do VS Code)
+### =====================================================================
+###
+### Ordem sugerida:
+###   1. Rode o servidor:  npm run dev
+###   2. Execute o "Cadastro" e depois o "Login"
+###   3. Copie o token da resposta do login para a variável @token abaixo
+###   4. Rode os testes de tarefas
+
+@base = http://localhost:3000
+@token = COLE_O_TOKEN_AQUI
+
+
+### =====================================================================
+### Rotas públicas
+### =====================================================================
+
+### Health check (mostra também qual banco está em uso)
+GET {{base}}/api/health
+
+### Versão
+GET {{base}}/api/version
+
+### Diagnóstico do banco: tabelas e quantidade de registros (sem expor dados)
+GET {{base}}/api/db-check
+
+### Rota /api inexistente -> 404 em JSON
+GET {{base}}/api/nao-existe
+
+
+### =====================================================================
+### Autenticação
+### =====================================================================
+
+### Cadastro -> 201
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "leonardo@teste.com",
+  "senha": "senha123"
+}
+
+### Cadastro repetido -> 409 (e-mail já cadastrado)
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "leonardo@teste.com",
+  "senha": "outraSenha"
+}
+
+### Cadastro com senha curta -> 400
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "curta@teste.com",
+  "senha": "123"
+}
+
+### Cadastro com e-mail inválido -> 400
+POST {{base}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "sem-arroba",
+  "senha": "senha123"
+}
+
+### Login -> 200 com { token }
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "leonardo@teste.com",
+  "senha": "senha123"
+}
+
+### Login aceitando o campo "password" -> 200
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "leonardo@teste.com",
+  "password": "senha123"
+}
+
+### Login com senha errada -> 401
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "leonardo@teste.com",
+  "senha": "errada"
+}
+
+### Login sem campos -> 400
+POST {{base}}/api/auth/login
+Content-Type: application/json
+
+{}
+
+
+### =====================================================================
+### Proteção das rotas
+### =====================================================================
+
+### Sem token -> 401
+GET {{base}}/api/tasks
+
+### Token mal formatado (sem "Bearer") -> 401
+GET {{base}}/api/tasks
+Authorization: {{token}}
+
+### Token inválido -> 401
+GET {{base}}/api/tasks
+Authorization: Bearer token.falso.qualquer
+
+
+### =====================================================================
+### Tarefas (CRUD do usuário logado)
+### =====================================================================
+
+### Criar tarefa -> 201
+POST {{base}}/api/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "Estudar React",
+  "prioridade": "high"
+}
+
+### Criar com prioridade inválida -> 201 com prioridade "medium"
+POST {{base}}/api/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "Revisar TypeScript",
+  "prioridade": "urgentissima"
+}
+
+### Criar com título curto -> 400
+POST {{base}}/api/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "AB"
+}
+
+### Criar com título numérico (type guard) -> 400
+POST {{base}}/api/tasks
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": 123
+}
+
+### Listar tarefas do usuário
+GET {{base}}/api/tasks
+Authorization: Bearer {{token}}
+
+### Buscar por título
+GET {{base}}/api/tasks?search=react
+Authorization: Bearer {{token}}
+
+### Busca com array (?search=a&search=b) -> ignora e lista tudo
+GET {{base}}/api/tasks?search=a&search=b
+Authorization: Bearer {{token}}
+
+### Tentativa de SQL Injection na busca -> tratada como texto comum
+GET {{base}}/api/tasks?search=' UNION SELECT id, email, senha_hash FROM usuarios --
+Authorization: Bearer {{token}}
+
+### PUT (atualização completa) -> 200
+PUT {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "Estudar React com TypeScript",
+  "prioridade": "medium",
+  "status": "completed"
+}
+
+### PUT sem título válido -> 400
+PUT {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "  ",
+  "status": "pending"
+}
+
+### PUT em tarefa inexistente (ou de outro usuário) -> 404
+PUT {{base}}/api/tasks/9999
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "titulo": "Não existe",
+  "prioridade": "low",
+  "status": "pending"
+}
+
+### PATCH só status -> 200
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "pending"
+}
+
+### PATCH só prioridade -> 200
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "prioridade": "low"
+}
+
+### PATCH com status fora da lista -> 400
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "cancelled"
+}
+
+### PATCH com corpo vazio -> 400
+PATCH {{base}}/api/tasks/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{}
+
+### PATCH com ID inválido -> 400
+PATCH {{base}}/api/tasks/abc
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "completed"
+}
+
+### DELETE -> 200
+DELETE {{base}}/api/tasks/1
+Authorization: Bearer {{token}}
+
+### DELETE em tarefa inexistente -> 404
+DELETE {{base}}/api/tasks/9999
+Authorization: Bearer {{token}}
+
+### DELETE com ID inválido -> 400
+DELETE {{base}}/api/tasks/abc
+Authorization: Bearer {{token}}

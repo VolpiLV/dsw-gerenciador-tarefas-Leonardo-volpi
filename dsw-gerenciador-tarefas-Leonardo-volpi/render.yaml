@@ -1,0 +1,31 @@
+# render.yaml — Blueprint do Render (Infraestrutura como Código)
+#
+# Descreve como o Render deve montar a máquina na nuvem:
+#   - instala tudo e gera o build do front (web/dist) + checagem do tsc
+#   - sobe o server.ts, que entrega a API e o front na mesma porta
+#   - usa /api/health para saber se o serviço está de pé
+#
+# Cada `git push origin main` dispara um novo deploy automaticamente.
+
+services:
+  - type: web
+    name: gerenciador-de-tarefas
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # O disco do plano grátis é apagado a cada reinício, por isso o banco
+      # precisa ficar no Turso. Preencha os dois no painel do Render.
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_TOKEN
+        sync: false
+      # O Render gera um segredo aleatório para assinar os tokens JWT.
+      - key: JWT_SECRET
+        generateValue: true
